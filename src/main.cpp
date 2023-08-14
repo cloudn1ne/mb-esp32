@@ -16,7 +16,7 @@
 #include "colorswapper.h"
 #include "idleframe.h"
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 // The name that will come up in the list in the kilter board app.
 // Must be alphanumeric.
