@@ -101,29 +101,28 @@ void redirectToIndex(AsyncWebServerRequest *request)
 }
 
 void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
-	AwsFrameInfo *info = (AwsFrameInfo*)arg;	
-    if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-        
-        DynamicJsonDocument json(128);
-        DeserializationError err = deserializeJson(json, data);
-        if (err) {
-            Serial.print(F("deserializeJson() failed with code "));
-            Serial.println(err.c_str());
-            return;
-        }
-		Serial.println(json["name"].as<const char*>());
-		Serial.println(json["value"].as<const bool>()?"on":"off");
-/*
-        const char *val = json["val"];
-        if (strcmp(val, "true") == 0) {
-            Serial.printf("val = %s", val);
-        }
-  */
+	
+	if(type == WS_EVT_DATA)
+	{
+		AwsFrameInfo *info = (AwsFrameInfo*)arg;	
+		if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) 
+		{        
+			// DynamicJsonDocument json(128);
+			StaticJsonDocument<256> json;
+			DeserializationError err = deserializeJson(json, data);
+			if (err) {
+				Serial.print(F("deserializeJson() failed with code "));
+				Serial.println(err.c_str());
+				return;
+			}
+			Serial.println(json["name"].as<const char*>());
+			Serial.println(json["value"].as<const bool>()?"on":"off");
+		}
 
     }	
 	else if(type == WS_EVT_CONNECT)
 	{ 
-    	Serial.println("Websocket client connection received");
+    	 Serial.println("Websocket client connection received");
   	} else if(type == WS_EVT_DISCONNECT)
 	{
     	Serial.println("Client disconnected"); 
