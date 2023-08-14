@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js" crossorigin="anonymous"></script>    
+    <script src="jcanvas.min.js"></script>
+    <title>MonkeyBoard</title>
+    <style>
+        body {  background-color: #e4e4e4;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                font-size: calc(10px + 2vmin);
+                color: black;
+            }
+        
+        .form-check {
+            font-size: 2vh;
+        }
+      </style>
+    <script>
+        $( function() {
+
+            var ws = new WebSocket('ws://192.168.2.1:80/ws');
+
+            ws.onmessage = function(event) {                
+                let data = JSON.parse(event.data);
+                console.log(data);
+            };
+
+            $('#clear').on('click', function (e) {
+                alert("clear");
+                $('canvas').clearCanvas()
+            });
+
+            $('#btn_advertise').change(function (e) {                
+                sendToggle('advertise', $(this).prop("checked"));                                                    
+            });
+         
+            function initGrid()
+            {                
+                    for (let x=0;x<27;x++)
+                    {
+                        for (let y=0;y<29;y++)
+                        {
+                            //console.log("x/y ",x,y);
+                            if (true) {
+                                $('canvas').drawRect({
+                                    strokeStyle: '#000',
+                                    strokeWidth: 1,
+                                    x: x * 20+9,
+                                    y: y * 20+9,
+                                    width: 16,
+                                    height: 16,
+                                    cornerRadius: 5
+                                    });                     
+                            }
+                        }
+                    }                
+            }
+
+            function sendToggle(name, val)
+            {
+                ws.send(JSON.stringify({
+                        name: name,
+                        value: val
+                }));            
+                
+            }
+            initGrid();
+        } );
+    </script>
+  </head>
+  <body>
+    MonkeyBoard
+    <p>
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="btn_advertise">
+            <label class="form-check-label" for="btn_advertise">Advertise BLE</label>
+        </div>
+        <p></p>
+        <button type="button" class="btn btn-outline-primary">Loop</button>
+        <button type="button" class="btn btn-outline-primary">Set FourPixels</button>
+        <button type="button" class="btn btn-outline-primary">Toggle Pixel 1/0</button>
+        <p></p>
+        <canvas
+            width="700"
+            height="700"
+            style="border: 0px solid black;"
+        ></canvas>
+        <p></p>
+        <button id="clear" type="button" class="btn btn-warning">Clear</button>               
+    </p>    
+  </body>
+</html>
