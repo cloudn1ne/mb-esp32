@@ -15,15 +15,11 @@
 // plugins
 #include "colorswapper.h"
 #include "idleframe.h"
+// settings 
+#include "settings.h"
+
 
 #define VERSION "1.1"
-
-// The name that will come up in the list in the kilter board app.
-// Must be alphanumeric.
-#define DISPLAY_NAME "Monkey Kilter Board"
-
-// The name of that real Kilter Board that we will connect too.
-#define TARGET_DISPLAY_NAME "Kilter Board#751033@3"
 
 // Aurora API level. must be nonzero, positive, single-digit integer.
 // API level 3+ uses a different protocol than API levels 1 and 2 and below.
@@ -36,10 +32,11 @@
 
 void tx_task();
 
-Preferences prefs;
+
 KilterDecoder *rx_decoder;
 KilterEncoder *tx_encoder;
 KilterGrid *grid = new KilterGrid(HOMEWALL_COLS, HOMEWALL_ROWS);
+Preferences prefs;
 
 // Tasks
 Scheduler runner;
@@ -47,7 +44,8 @@ Task txTask(250, -1, &tx_task);
 
 // plugins
 ColorSwapper *color_swapper;
-bool swapColorFlag = true;
+// last tgt connection state (used to update websocket)
+String lastConnectionState;
 
 // IdleFrame
 bool showIdleFrameAnimation = true;
@@ -59,6 +57,10 @@ AsyncWebSocket ws("/ws");
 const IPAddress apIP(192, 168, 2, 1);
 const IPAddress gateway(192, 168, 2, 1);
 const IPAddress subnet(255, 255, 255, 0);
+
+// funcs
+
+void sendConnectionState(AsyncWebSocket *ws);
 
 /*
 void setBLEPowerMax()
@@ -82,13 +84,14 @@ void tx_task()
 {			
 	if (tx_encoder->isConnected())	
 	{
-		if (showIdleFrameAnimation)	// show idle frame animation until we received first good data
+		if (setting_ShowIdleFrame && showIdleFrameAnimation)	// show idle frame animation until we received first good data
 		{
 			txTask.setInterval(300);
 			IdleFrame(tx_encoder);		
 		}				
 		tx_encoder->sendHolds();
 	}	
+	sendConnectionState(&ws);
 }
 
 void redirectToIndex(AsyncWebServerRequest *request)
@@ -100,6 +103,7 @@ void redirectToIndex(AsyncWebServerRequest *request)
 #endif
 }
 
+/// @brief WebSocket Eventhandler
 void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
 	
 	if(type == WS_EVT_DATA)
@@ -115,44 +119,58 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
 				Serial.println(err.c_str());
 				return;
 			}
+			if (json["name"] == "idle")
+			{
+				setting_ShowIdleFrame = json["value"].as<const bool>();
+			}
+			if (json["name"] == "swpcol")
+			{
+				setting_SwapColors = json["value"].as<const bool>();
+				color_swapper->toggle(setting_SwapColors);
+			}
+			if (json["name"] == "advname")
+			{				
+				setting_AdvertisedBoardName = json["value"].as<const char*>();	
+				Serial.printf("Setting new advname=%s, restarting\n", setting_AdvertisedBoardName);
+				saveSettings(&prefs);				
+				ESP.restart();
+			}
 			Serial.println(json["name"].as<const char*>());
-			Serial.println(json["value"].as<const bool>()?"on":"off");
+			Serial.println(json["value"].as<const bool>()?"on":"off");			
+			saveSettings(&prefs);
 		}
 
     }	
 	else if(type == WS_EVT_CONNECT)
 	{ 
-    	 Serial.println("Websocket client connection received");
+    	Serial.println("Websocket client connection received, sending settings");
+		sendSettings(&ws);
+		lastConnectionState="";
+		sendConnectionState(&ws);
   	} else if(type == WS_EVT_DISCONNECT)
 	{
-    	Serial.println("Client disconnected"); 
+    	// Serial.println("Client disconnected"); 
   	}
 }
 
 void setup() {
 	Serial.begin(115200);
-	printf("MonkeyBoard Gateway v%s", VERSION);
+	loadSettings(&prefs);
+	//saveSettings(&prefs);
 
-	prefs.begin("mb-esp32", false);
-	prefs.putString("adv_boardname", "Monkey "); 
-	prefs.putString("tgt_boardname", ""); 
-
+	printf("\nMonkeyBoard Gateway v%s\n", VERSION);
+	
 	// generate our boardnames for a level 3 API (@3)
 	// target boardnames must always end in "Kilter Board@3" otherwise the App will not discover them
 	char advertisedBoardName[128];
-	snprintf(advertisedBoardName, sizeof(advertisedBoardName), "%s%s%d", prefs.getString("adv_boardname").c_str(), "Kilter Board@", API_LEVEL);
-    printf("\nAdvertised Boardname: %s\n\n", advertisedBoardName);
+	snprintf(advertisedBoardName, sizeof(advertisedBoardName), "%s%s%d", setting_AdvertisedBoardName.c_str(), "@", API_LEVEL);	
+    Serial.printf("Advertised Boardname: %s\n", advertisedBoardName);
 
-	//char targetBoardName[128]="Kilter Board#751033@3";
-	char targetBoardName[128]="Kilter Board@3";
-	//snprintf(targetBoardName, sizeof(targetBoardName), "%s%s%d", prefs.getString("tgt_boardname").c_str(), "Kilter Board@", API_LEVEL);
-
-    printf("\nTarget Boardname: %s\n\n", targetBoardName);
-	prefs.end();
+    Serial.printf("Target Boardname: %s\n", setting_TargetBoardName.c_str());
 
 	// setBLEPowerMax();
 	rx_decoder = new KilterDecoder(advertisedBoardName);	
-	tx_encoder = new KilterEncoder(targetBoardName, MAX_PER_PACKET);
+	tx_encoder = new KilterEncoder(setting_TargetBoardName.c_str(), MAX_PER_PACKET);
 	
 	/* Connect WiFi */	
   	WiFi.mode(WIFI_AP);
@@ -190,6 +208,7 @@ void setup() {
  	
 	// plugins
 	color_swapper = new ColorSwapper();
+	color_swapper->toggle(setting_SwapColors);
 	color_swapper->setStartHold(0xFF0000);
 	color_swapper->setFootHold(0xFFFF00);
 
@@ -199,6 +218,7 @@ void setup() {
 	txTask.enable();	
 }
 
+
 void notifyClients() {
 	StaticJsonDocument<2048> doc;
     
@@ -206,19 +226,41 @@ void notifyClients() {
 	for (uint16_t i=0; i<rx_decoder->getNumHolds(); i++)
 	{
 		JsonObject hold = leds.createNestedObject();
-		hold["h"] = rx_decoder->getHold(i);
-		hold["c"] = rx_decoder->getColor(i);
+		uint16_t holdnum = rx_decoder->getHold(i);
+		hold["x"] = grid->getX(holdnum);
+		hold["y"] = grid->getY(holdnum);
+		hold["c"] = KilterColorToRGB(color_swapper->swap(rx_decoder->getColor(i)));	
 	}	
     char data[2048];
     size_t len = serializeJson(doc, data);
     ws.textAll(data, len);
 }
 
+/// @brief Publish Connection state to WebClient
+/// @param ws 
+void sendConnectionState(AsyncWebSocket *ws)
+{	
+	String connectionState = tx_encoder->getConnectionState();
+
+	if (connectionState != lastConnectionState)
+	{
+		StaticJsonDocument<128> doc;
+			
+		JsonObject cfg = doc.createNestedObject("conn");
+		cfg["connected"] = (connectionState=="connected");
+		cfg["scanning"] = (connectionState=="scanning");
+		char data[128];
+		size_t len = serializeJson(doc, data);
+		ws->textAll(data, len);		
+		lastConnectionState	= connectionState;
+	}
+}
+
 void loop() 
 {		
 	runner.execute();
 	rx_decoder->process();
-	tx_encoder->process();
+	tx_encoder->process(&ws);
 	
 	if (tx_encoder->isConnected())
 	{				

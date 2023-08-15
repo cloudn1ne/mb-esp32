@@ -11,15 +11,16 @@ MyAdvertisedDeviceCallbacks::MyAdvertisedDeviceCallbacks(std::string targetBoard
     board_name = targetBoardName;    
 }
 
+
 void MyAdvertisedDeviceCallbacks::onResult(BLEAdvertisedDevice advertisedDevice) 
 {
-   // Serial.printf("Advertised Device: %s \n", advertisedDevice.toString().c_str());
-    if (advertisedDevice.getName() == board_name)
+    Serial.printf("Advertised Device: %s \n", advertisedDevice.toString().c_str());
+    if (advertisedDevice.getName() == board_name) 
     { //Check if the name of the advertiser matches
 	  	advertisedDevice.getScan()->stop(); //Scan can be stopped, we found what we are looking for
 		address = new BLEAddress(advertisedDevice.getAddress()); //Address of advertiser is the one we need
 		*ready_to_connect_flag = true; //Set indicator, stating that we are ready to connect
-		Serial.printf("%s found. Connecting!\n", board_name.c_str());
+		Serial.printf("Device %s found. Connecting!\n", board_name.c_str());
 	}
 }
 
@@ -42,37 +43,55 @@ KilterEncoder::KilterEncoder(std::string boardName, uint8_t max_per_packet=20)
     readyToReconnectFlag = false;
     pServerAddress = nullptr;
 	pBLEScan = BLEDevice::getScan(); //create new scan
-	pBLEScan->setAdvertisedDeviceCallbacks(cb);
-	pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
-	pBLEScan->setInterval(100);
-	pBLEScan->setWindow(99);  // less or equal setInterval value    
+	/// pBLEScan->setAdvertisedDeviceCallbacks(cb);
+	pBLEScan->setActiveScan(false); //active scan will prevent WIFI AP from working
+    pBLEScan->setInterval(1000);
+	pBLEScan->setWindow(100);  // less or equal setInterval value    
     maxHoldsPerPacket = max_per_packet;    
     numHolds = 0;
+    state="init";
 }
 
 /// @brief Needs to be called regularly to connect to the discovered KilterBoard
 ///        
-void KilterEncoder::process()
+void KilterEncoder::process(AsyncWebSocket *ws)
 {   
+    //Serial.println("process start");
     if (!pClient->isConnected() && readyToReconnectFlag)
     {
+        Serial.println("process - reconnecting");
         Serial.println("========= RECONNECTING ==========");
         readyToConnectFlag = true;
+        state="reconnecting";
     }
     if (!isConnectedFlag)
 	{		
-        int scanTime = 5; //In seconds
-		BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
-		//Serial.print("Devices found: ");
-		//Serial.println(foundDevices.getCount());
-		//Serial.println("Scan done!");
-		delay(1000);
+        Serial.printf("process - scanning for %s\n", board_name.c_str());
+        state="scanning";
+        int scanTime = 3; //In seconds
+		BLEScanResults foundDevices = pBLEScan->start(scanTime, true);	
+        int deviceCount = foundDevices.getCount();        
+        for (uint32_t i = 0; i < deviceCount; i++)
+        {
+            BLEAdvertisedDevice device = foundDevices.getDevice(i);
+            Serial.printf("xDevice %s\n", device.toString().c_str());            
+            if (device.getServiceUUID().equals(BLEUUID(ADVERTISING_SERVICE_UUID)))
+             { //Check if the name of the advertiser begins with board_name                  
+                    pServerAddress = new BLEAddress(device.getAddress()); //Address of advertiser is the one we need
+                    readyToConnectFlag = true; //Set indicator, stating that we are ready to connect
+                    Serial.printf("KilterBoard Device found. Connecting!\n");
+             }            
+        }
 		pBLEScan->clearResults();   // delete results fromBLEScan buffer to release memory
 		pBLEScan->stop();
+        Serial.println("process - scanning completed");
 	}
-    if (readyToConnectFlag) {       
+    if (readyToConnectFlag) {    
+        Serial.println("process - ready to connect");   
 		if (connectToKilterBoard()) 
         {
+            Serial.println("process - connected");
+            state="connected";
             readyToReconnectFlag = true;
 			Serial.printf("KilterEncoder::process - We are now connected to %s\n", board_name.c_str());			
 			isConnectedFlag = true;
@@ -82,13 +101,20 @@ void KilterEncoder::process()
             }
 		} 
 		else {
+            Serial.println("process - failed");
+            state="failed";
 			Serial.printf("ERR KilterEncoder::process - FAILED to connect to %s\n", board_name.c_str());
             isConnectedFlag = false;
 		}
     	readyToConnectFlag = false;
     }
+   // Serial.println("process end");
 }
 
+String KilterEncoder::getConnectionState()
+{
+    return state;
+}
 
 void KilterEncoder::resetHolds()
 {
@@ -204,9 +230,10 @@ bool KilterEncoder::isConnected()
 bool KilterEncoder::connectToKilterBoard() 
 {                    
     // Connect to the remote BLE Server.
-    BLEAddress* addr = cb->getAddress();    
+    // BLEAddress* addr = cb->getAddress();    
     // pClient->connect(*addr, BLE_ADDR_TYPE_RANDOM);
-    pClient->connect(*addr);
+
+    pClient->connect(*pServerAddress);
     
     Serial.print("KilterEncoder::connectToKilterBoard - Number of services:  "); 
     Serial.println(String(pClient->getServices()->size()));

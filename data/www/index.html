@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=0.8" />
     <meta name="theme-color" content="#000000" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
@@ -21,46 +21,126 @@
                 color: black;
             }
         
-        .form-check {
+        .form-check  {
+            font-size: 2vh;
+        }
+        .form-group {
             font-size: 2vh;
         }
       </style>
     <script>
         $( function() {
 
+            const size=15;
+
             var ws = new WebSocket('ws://192.168.2.1:80/ws');
 
             ws.onmessage = function(event) {                
                 let data = JSON.parse(event.data);
                 console.log(data);
+
+                // hold data
+                if (data["leds"] !== undefined)
+                {
+                    initGrid();
+                    data["leds"].forEach((element) => {
+                        console.log({ element });
+                        drawHold(element.x, element.y, element.c);
+                    });
+                }
+                // setting
+                if (data["settings"] !== undefined)
+                {
+                    $('#btn_idle').prop('checked', data["settings"]["idle"]);
+                    $('#btn_swpcol').prop('checked', data["settings"]["swpcol"]);                                          
+                    $('#advname').val(data["settings"]["advname"]);
+                }
+                // connection (to target) state
+                if (data["conn"] !== undefined)
+                {
+                    data["conn"]["connected"]?$('#connected').show():$('#connected').hide();
+                    data["conn"]["scanning"]?$('#scanning').show():$('#scanning').hide();
+                    data["conn"]["failed"]?$('#failed').show():$('#failed').hide();
+                    data["conn"]["reconnecting"]?$('#reconnecting').show():$('#reconnecting').hide();
+                }
+
             };
 
-            $('#clear').on('click', function (e) {
-                alert("clear");
-                $('canvas').clearCanvas()
+            $('#save').on('click', function (e) {
+                ws.send(JSON.stringify({
+                        name: "advname",
+                        value: $('#advname').val()
+                }));   
             });
 
-            $('#btn_advertise').change(function (e) {                
-                sendToggle('advertise', $(this).prop("checked"));                                                    
+            $('#clear').on('click', function (e) {
+                initGrid();
             });
+
+            $('#btn_idle').change(function (e) {                
+                sendToggle('idle', $(this).prop("checked"));
+            });
+            $('#btn_swpcol').change(function (e) {                
+                sendToggle('swpcol', $(this).prop("checked"));
+            });
+            
          
+            function drawHold(x, y, rbgcolor)
+            {
+                rgbcolor_str = "#" + rbgcolor.toString(16).padStart(6, '0');
+                $('canvas').drawRect({
+                                    strokeStyle: '#000',
+                                    strokeWidth: 1,                                    
+                                    x: x * size+size/2,
+                                    y: y * size+size/2,
+                                    width: size-2,
+                                    height: size-2,
+                                    cornerRadius: 2,
+                                    fillStyle: rgbcolor_str
+                });                
+            }
+
             function initGrid()
             {                
+                    $('canvas').clearCanvas()
                     for (let x=0;x<27;x++)
                     {
-                        for (let y=0;y<29;y++)
+                        if (x % 2 == 0)
+                        {   
+                            let field_count = 0;
+                            for (let y=0;y<29;y++)
+                            {                                
+                                if (field_count % 2 != 0) {
+                                    $('canvas').drawRect({
+                                        strokeStyle: '#b4b4b4',
+                                        strokeWidth: 1,
+                                        x: x * size+size/2,
+                                        y: y * size+size/2,
+                                        width: size-2,
+                                        height: size-2,
+                                        cornerRadius: 2
+                                        });                     
+                                }
+                                field_count++;
+                            }
+                        }
+                        else
                         {
-                            //console.log("x/y ",x,y);
-                            if (true) {
-                                $('canvas').drawRect({
-                                    strokeStyle: '#000',
-                                    strokeWidth: 1,
-                                    x: x * 20+9,
-                                    y: y * 20+9,
-                                    width: 16,
-                                    height: 16,
-                                    cornerRadius: 5
-                                    });                     
+                            let field_count = 1;
+                            for (let y=0;y<29;y++)
+                            {                                
+                                if (field_count % 2 != 0) {
+                                    $('canvas').drawRect({
+                                        strokeStyle: '#b4b4b4',
+                                        strokeWidth: 1,
+                                        x: x * size+size/2,
+                                        y: y * size+size/2,
+                                        width: size-2,
+                                        height: size-2,
+                                        cornerRadius: 2
+                                        });                     
+                                }
+                                field_count++;
                             }
                         }
                     }                
@@ -79,24 +159,36 @@
     </script>
   </head>
   <body>
-    MonkeyBoard
-    <p>
+    <H1>MonkeyBoard</H1>
+    <span id="connected" style="display: none;" class="badge rounded-pill bg-success">Connected</span>
+    <span id="scanning" style="display: none;" class="badge rounded-pill bg-info">Scanning for KilterBoard</span>
+    <span id="failed" style="display: none;" class="badge rounded-pill bg-danger">Failed</span>
+    <span id="reconnecting" style="display: none;" class="badge rounded-pill bg-warning">Reconnecting</span>
+
+     <p>
         <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" role="switch" id="btn_advertise">
-            <label class="form-check-label" for="btn_advertise">Advertise BLE</label>
+            <input class="form-check-input" type="checkbox" role="switch" id="btn_idle">
+            <label class="form-check-label" for="btn_idle">Show Idle Animation</label>
         </div>
-        <p></p>
-        <button type="button" class="btn btn-outline-primary">Loop</button>
-        <button type="button" class="btn btn-outline-primary">Set FourPixels</button>
-        <button type="button" class="btn btn-outline-primary">Toggle Pixel 1/0</button>
-        <p></p>
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="btn_swpcol">
+            <label class="form-check-label" for="btn_swpcol">Swap Colors</label>
+        </div>        
+        <form>
+            <div class="form-group">
+                <label for="advname">Advertised BLE Name</label>
+                <input type="text" class="form-control" id="advname"  placeholder="Enter MonkeyBoard Bluetooth Name">    
+            </div>
+            <button id="save" type="submit" class="btn btn-primary">Save</button>
+        </form>
+        <p></p>        
         <canvas
-            width="700"
-            height="700"
-            style="border: 0px solid black;"
+            width="405"
+            height="420"
+            style="border: 1px solid grey;"
         ></canvas>
-        <p></p>
-        <button id="clear" type="button" class="btn btn-warning">Clear</button>               
+        <br>
+        <!-- <button id="clear" type="button" class="btn btn-warning">Clear</button> -->
     </p>    
   </body>
 </html>

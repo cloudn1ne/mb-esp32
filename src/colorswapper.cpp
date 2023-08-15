@@ -3,6 +3,7 @@
 /// @brief optional constructor allows adjusting all colors
 ColorSwapper::ColorSwapper(uint32_t startHoldRGB, uint32_t handHoldRGB, uint32_t footHoldRGB, uint32_t topHoldRGB)
 {
+     enabled = false;
      startHoldColor = RGBToKilterColor(startHoldRGB);
      handHoldColor = RGBToKilterColor(handHoldRGB);
      footHoldColor = RGBToKilterColor(footHoldRGB);
@@ -12,6 +13,7 @@ ColorSwapper::ColorSwapper(uint32_t startHoldRGB, uint32_t handHoldRGB, uint32_t
 /// @brief default constructor will use the KilterBoard colors
 ColorSwapper::ColorSwapper()
 {
+     enabled = false;
      startHoldColor = RGBToKilterColor(KB_STARTHOLD);
      handHoldColor = RGBToKilterColor(KB_HANDHOLD);
      footHoldColor = RGBToKilterColor(KB_FOOTHOLD);
@@ -20,6 +22,14 @@ ColorSwapper::ColorSwapper()
      Serial.printf("handHoldColor %06x = %d\n", KB_HANDHOLD, handHoldColor);
      Serial.printf("footHoldColor %06x = %d\n", KB_FOOTHOLD, footHoldColor);
      Serial.printf("topHoldColor %06x = %d\n", KB_TOPHOLD, topHoldColor);
+}
+
+
+/// @brief Enable / Disable swapping of colors
+/// @param on_off 
+void ColorSwapper::toggle(bool on_off)
+{
+    enabled = on_off;
 }
 
 /// @brief adjust individual hold category color
@@ -45,9 +55,13 @@ void ColorSwapper::setToptHold(uint32_t rgb)
 /// @param color input kilter color code
 /// @return  output kilter color code
 uint8_t ColorSwapper::swap(uint8_t color)
-{
-    uint32_t rgb = KilterColorToRGB(color);
+{        
+    if (!enabled)
+    {
+        return(color);
+    }
 
+    uint32_t rgb = KilterColorToRGB(color);
     if (rgb == KB_STARTHOLD)
 	{
 		return(startHoldColor);				
