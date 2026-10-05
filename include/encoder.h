@@ -50,13 +50,15 @@ class KilterEncoder {
 
     public:        
         KilterEncoder(std::string boardName, uint8_t max_per_packet);               
-        void process(AsyncWebSocket *websock); 
+        void process();
         void resetHolds();
         void setHold(uint16_t holdNumber, uint8_t holdColor);                
         void setBLECharacteristic(BLERemoteCharacteristic *KilterBoardCharacteristic);
         void sendHolds();
         bool isConnected();
         String getConnectionState();
+        uint16_t getNumHolds();
+        void copyHolds(uint16_t *outHolds, uint8_t *outColors);
 };
 
 #endif

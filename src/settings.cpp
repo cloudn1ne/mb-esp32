@@ -35,17 +35,3 @@ void saveSettings(Preferences *prefs)
     prefs->putString("advname", setting_AdvertisedBoardName);
     prefs->end();
 }
-
-void sendSettings(AsyncWebSocket *ws)
-{
-    StaticJsonDocument<2048> doc;
-    
-	JsonObject cfg = doc.createNestedObject("settings");
-    cfg["swpcol"] = setting_SwapColors;
-    cfg["idle"] = setting_ShowIdleFrame;
-    cfg["tgtname"] = setting_TargetBoardName;
-    cfg["advname"] = setting_AdvertisedBoardName;
-    char data[2048];
-    size_t len = serializeJson(doc, data);
-    ws->textAll(data, len);
-}

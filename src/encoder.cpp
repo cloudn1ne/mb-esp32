@@ -54,7 +54,7 @@ KilterEncoder::KilterEncoder(std::string boardName, uint8_t max_per_packet=20)
 
 /// @brief Needs to be called regularly to connect to the discovered KilterBoard
 ///        
-void KilterEncoder::process(AsyncWebSocket *ws)
+void KilterEncoder::process()
 {   
     //Serial.println("process start");
     if (!pClient->isConnected() && readyToReconnectFlag)
@@ -121,6 +121,17 @@ void KilterEncoder::resetHolds()
     numHolds = 0;
     memset(holds, 0, MAX_HOLDS);    
     memset(colors, 0, MAX_HOLDS);    
+}
+
+uint16_t KilterEncoder::getNumHolds()
+{
+    return numHolds;
+}
+
+void KilterEncoder::copyHolds(uint16_t *outHolds, uint8_t *outColors)
+{
+    memcpy(outHolds, holds, numHolds * sizeof(uint16_t));
+    memcpy(outColors, colors, numHolds * sizeof(uint8_t));
 }
 
 /// @brief Tag hold
